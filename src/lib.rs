@@ -62,6 +62,9 @@ mod hwaddr;
 pub use message::*;
 mod message;
 
+use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
+
 type NfqueueHandle = *const libc::c_void;
 type NfqueueQueueHandle = *const libc::c_void;
 
@@ -252,8 +255,13 @@ impl <T: Send> Queue<T> {
         unsafe { nfq_set_queuelen(self.qqh, queuelen); }
     }
 
-    /// Runs an infinite loop, waiting for packets and triggering the callback.
     pub fn run_loop(&self) {
+        let term = Arc::new(AtomicBool::new(false));
+        self.run_loop_cond(Arc::clone(&term));
+    }
+
+    /// Runs an infinite loop, waiting for packets and triggering the callback.
+    pub fn run_loop_cond(&self, cond: Arc<AtomicBool>) {
         assert!(!self.qh.is_null());
         assert!(!self.qqh.is_null());
         assert!(!self.cb.is_none());
@@ -263,7 +271,7 @@ impl <T: Send> Queue<T> {
         let buf_ptr = buf.as_mut_ptr() as *mut libc::c_void;
         let buf_len = buf.len() as libc::size_t;
 
-        loop {
+        while !cond.load(Ordering::Relaxed) {
             let rc = unsafe { libc::recv(fd,buf_ptr,buf_len,0) };
             if rc < 0 { panic!("error in recv()"); };
 
