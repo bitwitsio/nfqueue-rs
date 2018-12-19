@@ -62,6 +62,7 @@ mod hwaddr;
 pub use message::*;
 mod message;
 
+use std::mem;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 
@@ -267,6 +268,16 @@ impl <T: Send> Queue<T> {
         assert!(!self.cb.is_none());
 
         let fd = self.fd();
+
+        unsafe {
+        let opt: *mut i32 = libc::malloc(mem::size_of::<i32>()) as *mut i32;
+        if opt.is_null() {
+            panic!("failed to allocate memory");
+        }
+        libc::setsockopt(fd, libc::SOL_SOCKET, libc::O_NONBLOCK, opt as * const libc::c_void, mem::size_of::<i32>() as u32);
+        libc::free(opt as *mut libc::c_void);
+        }
+
         let mut buf : [u8;65536] = [0;65536];
         let buf_ptr = buf.as_mut_ptr() as *mut libc::c_void;
         let buf_len = buf.len() as libc::size_t;
