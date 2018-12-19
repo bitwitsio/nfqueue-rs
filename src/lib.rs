@@ -63,6 +63,8 @@ pub use message::*;
 mod message;
 
 use std::mem;
+use std::thread;
+use std::time;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 
@@ -283,7 +285,12 @@ impl <T: Send> Queue<T> {
         let buf_len = buf.len() as libc::size_t;
 
         while !cond.load(Ordering::Relaxed) {
-            let rc = unsafe { libc::recv(fd,buf_ptr,buf_len,0) };
+            let rc = unsafe { libc::recv(fd,buf_ptr,buf_len,0) } as i32;
+            if rc == libc::EAGAIN || rc == libc::EWOULDBLOCK {
+                thread::sleep(time::Duration::from_millis(2));
+                       continue
+            }
+
             if rc < 0 { panic!("error in recv()"); };
 
             let rv = unsafe { nfq_handle_packet(self.qh, buf_ptr, rc as libc::c_int) };
